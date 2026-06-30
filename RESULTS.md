@@ -19,6 +19,26 @@ so the data isn't trapped only in `report.html`.
 > inflated — compare the **delta between backends**, not absolute numbers. Device + Instruments
 > numbers still to come.
 
+## Methodology
+
+Both runtimes live in **one** app and are swapped with an in-app toggle, so every test exercises
+identical JS and app code — only the native library changes. Measurement harnesses live in
+[`src/bench/`](./src/bench); each scenario screen drives one harness.
+
+| Aspect | Approach | Where |
+| --- | --- | --- |
+| **Statistics** | `min / median / p95 / mean` computed per run set; headline latencies use the **median** (robust to GC pauses), with p95 reported alongside. | [`src/bench/stats.ts`](./src/bench/stats.ts) |
+| **Warm-up** | First sample discarded as cold before timing (covers JIT / first-call cost). | `roundtrip-latency.tsx` |
+| **Round-trip latency** | 50 samples (`set` → native `output` listener fires); also a 2 s @ 60 Hz stress run. | `roundtrip-latency.tsx` |
+| **Property write** | Tight loop of **2,000** writes, total ÷ N → µs/write. Measures **JS-side write cost**: Nitro's synchronous JSI `set()` (applied immediately) vs legacy's async bridge **enqueue** (`setNumber()`, applied later natively). End-to-end set→output is the *round-trip* test, not this one. | `harnesses.tsx` (`PROP_WRITES`) |
+| **File load / dispose** | 10 runs, yielding between iterations. Legacy has no file API — its "load" is mount → first frame. | `harnesses.tsx` (`LOAD_RUNS`) |
+| **Mount latency** | Measured **warm** (file already parsed and shared — each view just instantiates an artboard) *and* **cold** (Nitro parses inside the timing, like legacy, isolating raw overhead). The headline N-view numbers are the warm/shared path. | `mount-latency.tsx` |
+| **Memory** | Process **physical footprint** (`task_vm_info.phys_footprint` — the figure Xcode's memory gauge shows, where GPU/texture memory lands) via the [`perf-memory`](./modules/perf-memory) native module, reported as a **delta over baseline** (`footAdded = footprint − base`). Footprint is laggy/GPU-heavy, so a ±15 MB tolerance is used and the value is sampled after settling. | `harnesses.tsx` (`FOOT_THRESHOLD_MB`) |
+| **Leak vs release** | Memory-freed polls footprint for up to ~12 s after unmount and watches the Hermes GC count ([`gcWatcher.ts`](./src/bench/gcWatcher.ts)) to distinguish "released after GC" from a real leak. | `harnesses.tsx` |
+
+Why deltas for memory: with both libraries in one binary the absolute floor is inflated, but the
+*added* footprint per runtime is clean — so compare deltas, not absolutes.
+
 ## Headline numbers
 
 | Scenario | Nitro | Legacy | Ratio |
