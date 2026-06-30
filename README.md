@@ -33,6 +33,12 @@ build RN from source, already set in `ios/Podfile.properties.json`:
 This makes the first build slower but links cleanly on 26.3. If a future SDK 55 point release ships
 26.3-compatible prebuilt artifacts, this flag can be removed.
 
+The vendored **fmt 11.0.2** also won't compile under Xcode 26's Apple clang 21 — its consteval
+`FMT_STRING` call sites are no longer accepted as constant expressions
+([fmtlib/fmt#4740](https://github.com/fmtlib/fmt/issues/4740)). The `plugins/withFmtConsteval.js`
+config plugin builds *only* the `fmt` pod as C++17, where fmt falls back to runtime format-string
+validation. It runs during prebuild, so the fix survives `expo prebuild` regenerating the Podfile.
+
 ## Scenarios
 
 Each screen has a Nitro/Legacy toggle and a floating HUD (memory footprint, Δ vs baseline,

@@ -36,7 +36,8 @@
           }
         }
       ],
-      "expo-sharing"
+      "expo-sharing",
+      "./plugins/withFmtConsteval"
     ],
     "experiments": {
       "typedRoutes": true
