@@ -8,7 +8,8 @@
     "scheme": "riveperfcompare",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "bundleIdentifier": "com.mfazekas.rive-perf-compare"
     },
     "android": {
       "adaptiveIcon": {
@@ -34,11 +35,11 @@
             "imageWidth": 76
           }
         }
-      ]
+      ],
+      "expo-sharing"
     ],
     "experiments": {
-      "typedRoutes": true,
-      "reactCompiler": true
+      "typedRoutes": true
     }
   }
 }

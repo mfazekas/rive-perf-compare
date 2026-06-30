@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Rive React Native — Nitro vs Legacy</title>
+<style>
+  :root {
+    --bg: #0d1117; --card: #161b22; --card2: #1c2230; --border: #30363d;
+    --text: #e6edf3; --dim: #8b949e; --nitro: #3fb950; --legacy: #d29922;
+    --accent: #58a6ff; --danger: #f85149;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 940px; margin: 0 auto; padding: 40px 20px 80px; }
+  header h1 { font-size: 30px; margin: 0 0 6px; letter-spacing: -0.5px; }
+  header p.sub { color: var(--dim); margin: 0 0 18px; font-size: 16px; }
+  .pills { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+  .pill { background: var(--card); border: 1px solid var(--border); border-radius: 999px;
+    padding: 4px 12px; font-size: 13px; color: var(--dim); }
+  .pill b { color: var(--text); }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
+  .note { background: rgba(88,166,255,0.08); border: 1px solid rgba(88,166,255,0.3);
+    border-radius: 10px; padding: 12px 16px; color: var(--dim); font-size: 13.5px; margin: 18px 0 8px; }
+  .note b { color: var(--accent); }
+
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 28px 0 8px; }
+  .stat { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 16px; }
+  .stat .big { font-size: 30px; font-weight: 800; color: var(--nitro); letter-spacing: -1px; }
+  .stat .lbl { font-size: 12.5px; color: var(--dim); margin-top: 2px; }
+  @media (max-width: 760px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+
+  section.scn { background: var(--card); border: 1px solid var(--border); border-radius: 16px;
+    padding: 22px 22px 10px; margin: 22px 0; }
+  section.scn h2 { margin: 0 0 4px; font-size: 21px; }
+  section.scn .why { color: var(--dim); margin: 0 0 14px; font-size: 14.5px; }
+  .chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 760px) { .chart-row { grid-template-columns: 1fr; } }
+  .chart { background: var(--card2); border: 1px solid var(--border); border-radius: 12px; padding: 14px 10px 8px; }
+  .chart h3 { margin: 0 0 2px; font-size: 13.5px; text-align: center; color: var(--text); font-weight: 600; }
+  .chart .csub { margin: 0 0 6px; font-size: 11.5px; text-align: center; color: var(--dim); }
+  svg { width: 100%; height: auto; display: block; }
+  .legend { display: flex; justify-content: center; gap: 18px; margin: 6px 0 2px; font-size: 12.5px; color: var(--dim); }
+  .takeaway { margin: 14px 0 12px; padding: 12px 16px; border-left: 3px solid var(--nitro);
+    background: rgba(63,185,80,0.07); border-radius: 0 10px 10px 0; font-size: 14px; }
+  .takeaway b { color: var(--nitro); }
+
+  table.raw { width: 100%; border-collapse: collapse; margin: 10px 0 6px; font-size: 13px; }
+  table.raw th, table.raw td { text-align: right; padding: 6px 10px; border-bottom: 1px solid var(--border); }
+  table.raw th:first-child, table.raw td:first-child { text-align: left; color: var(--dim); }
+  table.raw th { color: var(--dim); font-weight: 600; }
+  td.n { color: var(--nitro); font-variant-numeric: tabular-nums; font-weight: 600; }
+  td.l { color: var(--legacy); font-variant-numeric: tabular-nums; font-weight: 600; }
+  td.x { color: var(--accent); font-variant-numeric: tabular-nums; }
+
+  footer { color: var(--dim); font-size: 13px; margin-top: 30px; border-top: 1px solid var(--border); padding-top: 18px; }
+  footer h3 { color: var(--text); font-size: 15px; margin: 0 0 8px; }
+  footer ul { margin: 0 0 14px; padding-left: 18px; }
+  code { background: var(--card2); padding: 1px 6px; border-radius: 5px; font-size: 12.5px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Rive React Native — Nitro vs Legacy</h1>
+    <p class="sub">Performance &amp; memory comparison of the new Nitro runtime
+      (<code>@rive-app/react-native</code>) against the legacy bridge runtime
+      (<code>rive-react-native</code>).</p>
+    <div class="pills">
+      <span class="pill"><span class="dot" style="background:var(--nitro)"></span><b>Nitro</b> v0.4.10</span>
+      <span class="pill"><span class="dot" style="background:var(--legacy)"></span><b>Legacy</b> v9.8.3</span>
+      <span class="pill">Expo SDK 55 · RN 0.83 · new arch</span>
+      <span class="pill">iPhone 16 Pro simulator · debug build</span>
+    </div>
+    <div class="note">
+      <b>Read these as directional.</b> Measured on the simulator with a debug build, so
+      treat the <b>ratios and trends</b> as the signal, not the absolute milliseconds/MB. Device +
+      Instruments numbers to follow. Both libraries are installed in the <i>same</i> app and switched
+      with a toggle, so the memory floor is inflated — compare the <b>delta between backends</b>.
+    </div>
+  </header>
+
+  <div class="stats">
+    <div class="stat"><div class="big">~30×</div><div class="lbl">faster to show 24 complex graphics</div></div>
+    <div class="stat"><div class="big">flat</div><div class="lbl">mount time stays flat as views grow</div></div>
+    <div class="stat"><div class="big">instant</div><div class="lbl">memory released on unmount (vs lazy)</div></div>
+    <div class="stat"><div class="big">~17×</div><div class="lbl">faster data-bound property writes</div></div>
+  </div>
+
+  <!-- SCENARIO 1 -->
+  <section class="scn">
+    <h2>1 · Time to show graphics on N views</h2>
+    <p class="why">How long from mounting a screen until graphics appear on <i>all</i> views. Nitro loads
+      the file <b>once</b> and shares it across views (each view just instantiates an artboard); legacy
+      re-parses the whole file inside <b>every</b> view.</p>
+    <div class="chart-row">
+      <div class="chart">
+        <h3>Mount → all visible — counter (857 KB)</h3>
+        <p class="csub">milliseconds · lower is better</p>
+        <div id="c1a"></div>
+      </div>
+      <div class="chart">
+        <h3>Same test, complex file — jellyfish (2.9 MB), N=24</h3>
+        <p class="csub">milliseconds · lower is better</p>
+        <div id="c1b"></div>
+      </div>
+    </div>
+    <div class="legend">
+      <span><span class="dot" style="background:var(--nitro)"></span>Nitro</span>
+      <span><span class="dot" style="background:var(--legacy)"></span>Legacy</span>
+    </div>
+    <table class="raw">
+      <tr><th>File · Views</th><th>Nitro</th><th>Legacy</th><th>Legacy slower by</th></tr>
+      <tr><td>counter 857 KB · 12</td><td class="n">48 ms</td><td class="l">111 ms</td><td class="x">2.3×</td></tr>
+      <tr><td>counter 857 KB · 24</td><td class="n">71 ms</td><td class="l">268 ms</td><td class="x">3.8×</td></tr>
+      <tr><td>jellyfish 2.9 MB · 24</td><td class="n">130 ms</td><td class="l">3953 ms</td><td class="x">30×</td></tr>
+    </table>
+    <div class="takeaway"><b>Nitro stays flat; legacy explodes with file size × view count.</b>
+      With the 2.9 MB file across 24 views, legacy fills the grid over <b>~4 seconds</b>
+      (first view 384 ms → last 3953 ms, popping in one-by-one), while nitro shows the whole grid in
+      130 ms — every view lights up in the same frame.</div>
+  </section>
+
+  <!-- SCENARIO 2 -->
+  <section class="scn">
+    <h2>2 · Memory — one shared file vs many copies</h2>
+    <p class="why">Showing the same <code>.riv</code> in many views. Nitro keeps a single shared
+      <code>RiveFile</code> in memory; legacy loads an independent copy per view, so memory climbs with N.</p>
+    <div class="chart-row">
+      <div class="chart">
+        <h3>Footprint — same file in 9 views (rewards 212 KB)</h3>
+        <p class="csub">MB · lower is better</p>
+        <div id="c2a"></div>
+      </div>
+      <div class="chart">
+        <h3>Heap added by mounting 6× jellyfish</h3>
+        <p class="csub">MB allocated above baseline · lower is better</p>
+        <div id="c2b"></div>
+      </div>
+    </div>
+    <div class="legend">
+      <span><span class="dot" style="background:var(--nitro)"></span>Nitro</span>
+      <span><span class="dot" style="background:var(--legacy)"></span>Legacy</span>
+    </div>
+    <div class="takeaway"><b>One parse, one set of resources.</b> Legacy used ~25 MB more for 9 views of a
+      tiny file, and roughly <b>2× the heap</b> to mount the heavy file — because every view holds its own
+      copy. The gap widens as you add views.</div>
+  </section>
+
+  <!-- SCENARIO 3 -->
+  <section class="scn">
+    <h2>3 · Eager release — memory freed on unmount</h2>
+    <p class="why">Live malloc heap (drops the instant memory is freed) while mounting then unmounting a
+      heavy screen. Nitro calls native <code>dispose()</code> deterministically on unmount; legacy waits
+      for deferred cleanup / GC.</p>
+    <div class="chart">
+      <h3>Live heap through mount → unmount (6× jellyfish)</h3>
+      <p class="csub">MB · the drop after unmount is the release</p>
+      <div id="c3"></div>
+    </div>
+    <div class="legend">
+      <span><span class="dot" style="background:var(--nitro)"></span>Nitro</span>
+      <span><span class="dot" style="background:var(--legacy)"></span>Legacy</span>
+    </div>
+    <div class="takeaway"><b>Nitro snaps back to baseline immediately; legacy drains slowly.</b>
+      On unmount nitro returned to the exact baseline in &lt;1 s, while legacy stayed ~19 MB high and
+      bled down over ~10 s. Neither leaks — but nitro frees <b>eagerly &amp; predictably</b>, which matters
+      when navigating away from a heavy screen. (Measured on live heap; footprint alone hides this because
+      it doesn’t shrink promptly.)</div>
+  </section>
+
+  <!-- SCENARIO 4 -->
+  <section class="scn">
+    <h2>4 · File load &amp; dispose latency</h2>
+    <p class="why">Nitro exposes a programmatic file API — each run times
+      <code>RiveFileFactory.fromSource()</code> (load) and <code>file.dispose()</code> (release). Legacy
+      has no file API, so loading is measured as mount → first frame, and disposal is implicit.</p>
+    <div class="chart-row">
+      <div class="chart">
+        <h3>File load time — counter (857 KB), 10 runs</h3>
+        <p class="csub">milliseconds (avg) · lower is better</p>
+        <div id="c4a"></div>
+      </div>
+      <div class="chart">
+        <h3>Explicit dispose — nitro only</h3>
+        <p class="csub">milliseconds (avg)</p>
+        <div id="c4b"></div>
+      </div>
+    </div>
+    <div class="legend">
+      <span><span class="dot" style="background:var(--nitro)"></span>Nitro</span>
+      <span><span class="dot" style="background:var(--legacy)"></span>Legacy</span>
+    </div>
+    <div class="takeaway"><b>Loads ~2.7× faster and offers instant, explicit disposal.</b>
+      Nitro loaded in ~7.8 ms vs ~21 ms, and disposes in ~0.4 ms on demand — legacy can’t free a file
+      programmatically at all (it only releases when the view unmounts).</div>
+  </section>
+
+  <!-- SCENARIO 5 -->
+  <section class="scn">
+    <h2>5 · Property update overhead</h2>
+    <p class="why">Writing a data-bound number property in a tight loop (2000×). Nitro’s
+      <code>set()</code> is a <b>synchronous JSI call</b> applied immediately; legacy’s
+      <code>setNumber()</code> is an <b>async bridge enqueue</b> applied later on the native side.</p>
+    <div class="chart-row">
+      <div class="chart">
+        <h3>Cost per property write</h3>
+        <p class="csub">microseconds · lower is better</p>
+        <div id="c5a"></div>
+      </div>
+      <div class="chart">
+        <h3>Sustained write throughput</h3>
+        <p class="csub">thousand updates / second · higher is better</p>
+        <div id="c5b"></div>
+      </div>
+    </div>
+    <div class="legend">
+      <span><span class="dot" style="background:var(--nitro)"></span>Nitro</span>
+      <span><span class="dot" style="background:var(--legacy)"></span>Legacy</span>
+    </div>
+    <div class="takeaway"><b>~17× faster per write — and that understates it.</b>
+      Nitro applies ~1,000,000 writes/sec synchronously; legacy enqueues ~57,000/sec and still has to
+      process those bridge messages <i>after</i> the loop. This is where nitro’s architecture (direct
+      JSI vs the async bridge) pays off: frequent property/state updates (sliders, gestures,
+      data-driven animation) stay cheap and immediate.</div>
+  </section>
+
+  <footer>
+    <h3>Why nitro wins (the mechanism)</h3>
+    <ul>
+      <li><b>Shared <code>RiveFile</code> primitive</b> — the file is parsed once and reused by every view, so both memory and mount time stay flat as views grow. Legacy parses per view.</li>
+      <li><b>Eager, deterministic disposal</b> — native resources are freed on unmount via <code>dispose()</code>, not when the JS GC eventually runs.</li>
+      <li><b>Programmatic file API</b> — load/dispose are explicit and fast; legacy only loads implicitly inside a view.</li>
+    </ul>
+    <h3>Method &amp; caveats</h3>
+    <ul>
+      <li>Mount latency: time from mount to “ready” on every view — nitro via <code>awaitViewReady()</code>, legacy via the <code>onPlay</code> callback. Nitro pre-loads the shared file first, so the number reflects per-view instantiation.</li>
+      <li>Memory: in-app native module reads <code>phys_footprint</code> (Xcode’s gauge) and live malloc heap (<code>malloc_zone_statistics</code>). Heap reveals release; footprint does not shrink promptly. GPU/Metal texture memory is outside malloc and only shows in footprint/Instruments.</li>
+      <li><b>Simulator + debug build</b> → absolute values are inflated and noisy; ratios are the signal. Device + Instruments (Allocations) numbers to follow.</li>
+      <li>Reproduce in the <code>rive-perf-compare</code> app: <code>npx expo run:ios</code>, then walk the scenario screens with the Nitro/Legacy toggle.</li>
+    </ul>
+  </footer>
+</div>
+
+<script>
+const NITRO = '#3fb950', LEGACY = '#d29922', GRID = '#30363d', DIM = '#8b949e', TEXT = '#e6edf3';
+const NS = 'http://www.w3.org/2000/svg';
+
+// Grouped vertical bar chart.
+function groupedBars(id, { categories, series, unit = '', max = null, fmt = v => v }) {
+  const W = 600, H = 320, padL = 48, padR = 16, padT = 18, padB = 46;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const top = max || Math.max(...series.flatMap(s => s.values)) * 1.15;
+  const groups = categories.length, gW = plotW / groups;
+  const bw = Math.min(46, (gW - 16) / series.length);
+  const y = v => padT + plotH - (v / top) * plotH;
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img">`;
+  // gridlines
+  for (let i = 0; i <= 4; i++) {
+    const gy = padT + (plotH * i) / 4, val = top * (1 - i / 4);
+    s += `<line x1="${padL}" y1="${gy}" x2="${W - padR}" y2="${gy}" stroke="${GRID}" stroke-width="1"/>`;
+    s += `<text x="${padL - 8}" y="${gy + 4}" fill="${DIM}" font-size="11" text-anchor="end">${fmt(Math.round(val))}</text>`;
+  }
+  categories.forEach((cat, gi) => {
+    const gx = padL + gi * gW;
+    const groupInner = series.length * bw + (series.length - 1) * 8;
+    const startX = gx + (gW - groupInner) / 2;
+    series.forEach((ser, si) => {
+      const bx = startX + si * (bw + 8), v = ser.values[gi], by = y(v);
+      s += `<rect x="${bx}" y="${by}" width="${bw}" height="${padT + plotH - by}" rx="3" fill="${ser.color}"/>`;
+      s += `<text x="${bx + bw / 2}" y="${by - 6}" fill="${TEXT}" font-size="12" font-weight="700" text-anchor="middle">${fmt(v)}</text>`;
+    });
+    s += `<text x="${gx + gW / 2}" y="${H - padB + 20}" fill="${DIM}" font-size="12" text-anchor="middle">${cat}</text>`;
+  });
+  if (unit) s += `<text x="${padL - 8}" y="${padT - 6}" fill="${DIM}" font-size="10" text-anchor="end">${unit}</text>`;
+  s += `</svg>`;
+  document.getElementById(id).innerHTML = s;
+}
+
+// Multi-series line chart.
+function lineChart(id, { xLabels, series, unit = '', min = null, max = null }) {
+  const W = 600, H = 300, padL = 48, padR = 18, padT = 18, padB = 40;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const all = series.flatMap(s => s.values);
+  const lo = min != null ? min : Math.min(...all) - 8;
+  const hi = max != null ? max : Math.max(...all) + 8;
+  const x = i => padL + (plotW * i) / (xLabels.length - 1);
+  const y = v => padT + plotH - ((v - lo) / (hi - lo)) * plotH;
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img">`;
+  for (let i = 0; i <= 4; i++) {
+    const gy = padT + (plotH * i) / 4, val = hi - ((hi - lo) * i) / 4;
+    s += `<line x1="${padL}" y1="${gy}" x2="${W - padR}" y2="${gy}" stroke="${GRID}" stroke-width="1"/>`;
+    s += `<text x="${padL - 8}" y="${gy + 4}" fill="${DIM}" font-size="11" text-anchor="end">${Math.round(val)}</text>`;
+  }
+  xLabels.forEach((lbl, i) => {
+    s += `<text x="${x(i)}" y="${H - padB + 20}" fill="${DIM}" font-size="11" text-anchor="middle">${lbl}</text>`;
+  });
+  series.forEach(ser => {
+    const pts = ser.values.map((v, i) => `${x(i)},${y(v)}`).join(' ');
+    s += `<polyline points="${pts}" fill="none" stroke="${ser.color}" stroke-width="2.5" stroke-linejoin="round"/>`;
+    ser.values.forEach((v, i) => {
+      s += `<circle cx="${x(i)}" cy="${y(v)}" r="4" fill="${ser.color}"/>`;
+      s += `<text x="${x(i)}" y="${y(v) - 9}" fill="${ser.color}" font-size="11" font-weight="700" text-anchor="middle">${v}</text>`;
+    });
+  });
+  if (unit) s += `<text x="${padL - 8}" y="${padT - 6}" fill="${DIM}" font-size="10" text-anchor="end">${unit}</text>`;
+  s += `</svg>`;
+  document.getElementById(id).innerHTML = s;
+}
+
+// 1 — mount latency
+groupedBars('c1a', {
+  categories: ['N = 12', 'N = 24'],
+  series: [
+    { color: NITRO, values: [48, 71] },
+    { color: LEGACY, values: [111, 268] },
+  ], unit: 'ms', fmt: v => v,
+});
+groupedBars('c1b', {
+  categories: ['N = 24'],
+  series: [
+    { color: NITRO, values: [130] },
+    { color: LEGACY, values: [3953] },
+  ], unit: 'ms', fmt: v => v,
+});
+
+// 2 — memory
+groupedBars('c2a', {
+  categories: ['9 views'],
+  series: [
+    { color: NITRO, values: [220.7] },
+    { color: LEGACY, values: [245.3] },
+  ], unit: 'MB', min: 0, max: 280, fmt: v => v,
+});
+groupedBars('c2b', {
+  categories: ['6× jellyfish'],
+  series: [
+    { color: NITRO, values: [19] },
+    { color: LEGACY, values: [38] },
+  ], unit: 'MB', max: 48, fmt: v => v,
+});
+
+// 3 — eager release (heap over phases)
+lineChart('c3', {
+  xLabels: ['baseline', 'mounted', 'unmount +1s', '+8s'],
+  series: [
+    { color: NITRO, values: [135, 155, 135, 135] },
+    { color: LEGACY, values: [135, 173, 154, 141] },
+  ], unit: 'MB', min: 125, max: 185,
+});
+
+// 5 — property update overhead
+groupedBars('c5a', {
+  categories: ['per write'],
+  series: [
+    { color: NITRO, values: [1.0] },
+    { color: LEGACY, values: [17.5] },
+  ], unit: 'µs', max: 22, fmt: v => v,
+});
+groupedBars('c5b', {
+  categories: ['throughput'],
+  series: [
+    { color: NITRO, values: [1000] },
+    { color: LEGACY, values: [57] },
+  ], unit: 'k/s', max: 1150, fmt: v => v,
+});
+
+// 4 — load / dispose
+groupedBars('c4a', {
+  categories: ['load'],
+  series: [
+    { color: NITRO, values: [7.8] },
+    { color: LEGACY, values: [21.0] },
+  ], unit: 'ms', max: 26, fmt: v => v,
+});
+groupedBars('c4b', {
+  categories: ['dispose'],
+  series: [
+    { color: NITRO, values: [0.4] },
+  ], unit: 'ms', max: 2, fmt: v => v,
+});
+</script>
+</body>
+</html>
