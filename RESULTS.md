@@ -27,7 +27,8 @@ identical JS and app code — only the native library changes. Measurement harne
 
 | Aspect | Approach | Where |
 | --- | --- | --- |
-| **Statistics** | `min / median / p95 / mean` computed per run set; headline latencies use the **median** (robust to GC pauses), with p95 reported alongside. | [`src/bench/stats.ts`](./src/bench/stats.ts) |
+| **Suite aggregation** | The standard suite runs **N passes** (default 5, set by the *Runs* stepper). Each metric is reported as **mean ± sd** across passes; every raw per-pass sample is kept in the exported JSON. | [`run-all.tsx`](./src/app/run-all.tsx), [`exportResults.ts`](./src/bench/exportResults.ts) |
+| **Statistics** | `min / median / p95 / mean` for in-harness sample sets; `meanStddev` for cross-pass aggregation. | [`src/bench/stats.ts`](./src/bench/stats.ts) |
 | **Warm-up** | First sample discarded as cold before timing (covers JIT / first-call cost). | `roundtrip-latency.tsx` |
 | **Round-trip latency** | 50 samples (`set` → native `output` listener fires); also a 2 s @ 60 Hz stress run. | `roundtrip-latency.tsx` |
 | **Property write** | Tight loop of **2,000** writes, total ÷ N → µs/write. Measures **JS-side write cost**: Nitro's synchronous JSI `set()` (applied immediately) vs legacy's async bridge **enqueue** (`setNumber()`, applied later natively). End-to-end set→output is the *round-trip* test, not this one. | `harnesses.tsx` (`PROP_WRITES`) |
@@ -38,6 +39,11 @@ identical JS and app code — only the native library changes. Measurement harne
 
 Why deltas for memory: with both libraries in one binary the absolute floor is inflated, but the
 *added* footprint per runtime is clean — so compare deltas, not absolutes.
+
+Run-to-run spread (5 passes, iPhone 13 mini, release) is small relative to the gaps it measures —
+sd is **0–5 %** of the mean on most metrics. The two exceptions are mount latency on Nitro
+(**~12 %**, dominated by the first cold parse before the shared `RiveFile` warms up) and the Nitro
+property-write loop (**~6 %**); both are still negligible beside the 3–94× backend gaps.
 
 ## Headline numbers
 
