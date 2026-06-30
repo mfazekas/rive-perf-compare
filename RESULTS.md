@@ -27,7 +27,7 @@ identical JS and app code — only the native library changes. Measurement harne
 
 | Aspect | Approach | Where |
 | --- | --- | --- |
-| **Suite aggregation** | The standard suite runs **N passes** (default 5, set by the *Runs* stepper). Each metric is reported as **mean ± sd** across passes; every raw per-pass sample is kept in the exported JSON. | [`run-all.tsx`](./src/app/run-all.tsx), [`exportResults.ts`](./src/bench/exportResults.ts) |
+| **Suite aggregation** | The standard suite runs **N passes** (default 5, set by the *Runs* stepper). Each metric is reported as **mean ± sd** across passes; every raw per-pass sample is kept in the exported JSON ([example 5-run export](./results/iphone13mini-ios26-release-5run.md)). | [`run-all.tsx`](./src/app/run-all.tsx), [`exportResults.ts`](./src/bench/exportResults.ts) |
 | **Statistics** | `min / median / p95 / mean` for in-harness sample sets; `meanStddev` for cross-pass aggregation. | [`src/bench/stats.ts`](./src/bench/stats.ts) |
 | **Warm-up** | First sample discarded as cold before timing (covers JIT / first-call cost). | `roundtrip-latency.tsx` |
 | **Round-trip latency** | 50 samples (`set` → native `output` listener fires); also a 2 s @ 60 Hz stress run. | `roundtrip-latency.tsx` |
