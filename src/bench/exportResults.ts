@@ -3,12 +3,13 @@ import * as Sharing from 'expo-sharing';
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 
-import type { BenchMetric, BenchResult, BenchSession } from './types';
+import type { BenchResult, BenchSession } from './types';
+import { meanStddev } from './stats';
 
 const NITRO_VERSION = require('@rive-app/react-native/package.json').version;
 const LEGACY_VERSION = require('rive-react-native/package.json').version;
 
-export function buildSession(results: BenchResult[], startedAt: number): BenchSession {
+export function buildSession(results: BenchResult[], startedAt: number, runs: number): BenchSession {
   return {
     device: Device.modelName ?? 'unknown',
     os: `${Platform.OS} ${Platform.Version}`,
@@ -16,15 +17,60 @@ export function buildSession(results: BenchResult[], startedAt: number): BenchSe
     nitroVersion: NITRO_VERSION,
     legacyVersion: LEGACY_VERSION,
     startedAt,
+    runs,
     results,
   };
 }
 
-function fmt(m: BenchMetric): string {
-  const v = m.value;
-  const abs = Math.abs(v);
-  const decimals = abs >= 100 ? 0 : abs >= 10 ? 1 : 2;
-  return `${v.toFixed(decimals)} ${m.unit}`;
+/** A metric aggregated across the suite's runs. */
+export type AggMetric = { key: string; label: string; unit: string; mean: number; sd: number; n: number };
+export type ScenarioAgg = { scenario: string; title: string; nitro: AggMetric[]; legacy: AggMetric[] };
+
+/** Group raw per-run results by scenario/backend and reduce each metric to mean ± sd. */
+export function summarizeResults(results: BenchResult[]): ScenarioAgg[] {
+  const order: string[] = [];
+  const byScenario = new Map<string, { title: string; nitro: BenchResult[]; legacy: BenchResult[] }>();
+  for (const r of results) {
+    if (!byScenario.has(r.scenario)) {
+      byScenario.set(r.scenario, { title: r.title, nitro: [], legacy: [] });
+      order.push(r.scenario);
+    }
+    byScenario.get(r.scenario)![r.backend].push(r);
+  }
+
+  const aggBackend = (rs: BenchResult[]): AggMetric[] => {
+    const keys: string[] = [];
+    for (const r of rs) for (const m of r.metrics) if (!keys.includes(m.key)) keys.push(m.key);
+    return keys.map((key) => {
+      const values: number[] = [];
+      let label = key;
+      let unit = '';
+      for (const r of rs) {
+        const m = r.metrics.find((m) => m.key === key);
+        if (m) {
+          values.push(m.value);
+          label = m.label;
+          unit = m.unit;
+        }
+      }
+      const { mean, sd, n } = meanStddev(values);
+      return { key, label, unit, mean, sd, n };
+    });
+  };
+
+  return order.map((id) => {
+    const g = byScenario.get(id)!;
+    return { scenario: id, title: g.title, nitro: aggBackend(g.nitro), legacy: aggBackend(g.legacy) };
+  });
+}
+
+/** "34.7 ± 0.8 ms" — the ± term is dropped for single-run metrics. */
+export function formatAgg(a: AggMetric | undefined): string {
+  if (!a || a.n === 0) return '—';
+  const abs = Math.abs(a.mean);
+  const d = abs >= 100 ? 0 : abs >= 10 ? 1 : 2;
+  const mean = a.mean.toFixed(d);
+  return a.n > 1 ? `${mean} ± ${a.sd.toFixed(d)} ${a.unit}` : `${mean} ${a.unit}`;
 }
 
 /** Pivot results into a backend-by-backend Markdown comparison, grouped by scenario. */
@@ -34,34 +80,23 @@ function toMarkdown(session: BenchSession): string {
   lines.push('');
   lines.push(`- Device: **${session.device}** · ${session.os} · **${session.build}** build`);
   lines.push(`- Nitro \`@rive-app/react-native\` v${session.nitroVersion} · Legacy \`rive-react-native\` v${session.legacyVersion}`);
+  lines.push(
+    session.runs > 1
+      ? `- ${session.runs} runs per scenario · values are **mean ± sd**`
+      : `- Single run per scenario`
+  );
   lines.push('');
   lines.push('| Scenario | Metric | Nitro | Legacy |');
   lines.push('| --- | --- | --- | --- |');
 
-  // Preserve scenario order from first appearance.
-  const order: string[] = [];
-  const byScenario = new Map<string, { title: string; nitro?: BenchResult; legacy?: BenchResult }>();
-  for (const r of session.results) {
-    if (!byScenario.has(r.scenario)) {
-      byScenario.set(r.scenario, { title: r.title });
-      order.push(r.scenario);
-    }
-    byScenario.get(r.scenario)![r.backend] = r;
-  }
-
-  for (const id of order) {
-    const { title, nitro, legacy } = byScenario.get(id)!;
+  for (const s of summarizeResults(session.results)) {
     const keys: string[] = [];
-    for (const r of [nitro, legacy]) {
-      for (const m of r?.metrics ?? []) if (!keys.includes(m.key)) keys.push(m.key);
-    }
+    for (const m of [...s.nitro, ...s.legacy]) if (!keys.includes(m.key)) keys.push(m.key);
     keys.forEach((key, i) => {
-      const nm = nitro?.metrics.find((m) => m.key === key);
-      const lm = legacy?.metrics.find((m) => m.key === key);
+      const nm = s.nitro.find((m) => m.key === key);
+      const lm = s.legacy.find((m) => m.key === key);
       const label = nm?.label ?? lm?.label ?? key;
-      lines.push(
-        `| ${i === 0 ? title : ''} | ${label} | ${nm ? fmt(nm) : '—'} | ${lm ? fmt(lm) : '—'} |`
-      );
+      lines.push(`| ${i === 0 ? s.title : ''} | ${label} | ${formatAgg(nm)} | ${formatAgg(lm)} |`);
     });
   }
 

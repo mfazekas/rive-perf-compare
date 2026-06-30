@@ -10,3 +10,12 @@ export function summarize(lats: number[]): Stats | null {
   const mean = s.reduce((a, b) => a + b, 0) / s.length;
   return { n: s.length, min: s[0], max: s[s.length - 1], median: q(0.5), p95: q(0.95), mean };
 }
+
+/** Sample mean and standard deviation (Bessel-corrected; sd is 0 for n ≤ 1). */
+export function meanStddev(values: number[]): { mean: number; sd: number; n: number } {
+  const n = values.length;
+  if (!n) return { mean: 0, sd: 0, n: 0 };
+  const mean = values.reduce((a, b) => a + b, 0) / n;
+  const variance = n > 1 ? values.reduce((a, b) => a + (b - mean) ** 2, 0) / (n - 1) : 0;
+  return { mean, sd: Math.sqrt(variance), n };
+}

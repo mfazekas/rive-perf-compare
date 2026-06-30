@@ -17,6 +17,8 @@ export type BenchResult = {
   backend: Backend;
   params: Record<string, string | number>;
   metrics: BenchMetric[];
+  /** 0-based index of the suite pass this result came from (for multi-run aggregation). */
+  run: number;
   ts: number;
 };
 
@@ -27,6 +29,8 @@ export type BenchSession = {
   nitroVersion: string;
   legacyVersion: string;
   startedAt: number;
+  /** Number of suite passes; each scenario/backend is measured once per pass. */
+  runs: number;
   results: BenchResult[];
 };
 

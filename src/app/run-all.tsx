@@ -2,12 +2,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { exportSession, buildSession } from '../bench/exportResults';
+import { exportSession, buildSession, summarizeResults, formatAgg } from '../bench/exportResults';
 import { HARNESSES } from '../bench/harnesses';
 import type { BenchMetric, BenchResult } from '../bench/types';
 import { BACKEND_META, type Backend } from '../rive/Backend';
 import { colors, spacing } from '../theme';
-import { Button, Card, Caption } from '../ui/widgets';
+import { Button, Card, Caption, Stepper } from '../ui/widgets';
 
 type Step = {
   scenario: string;
@@ -28,6 +28,7 @@ const STEPS: Step[] = HARNESSES.flatMap((h) =>
   }))
 );
 
+const DEFAULT_RUNS = 5;
 // Let memory settle and prior views tear down between steps.
 const SETTLE_MS = 1500;
 // Generous ceiling — memory-freed alone runs settle + up to 12s of polling.
@@ -37,18 +38,21 @@ type Status = 'idle' | 'settling' | 'measuring' | 'done';
 
 export default function RunAll() {
   const [status, setStatus] = useState<Status>('idle');
-  const [stepIndex, setStepIndex] = useState(0);
+  const [runs, setRuns] = useState(DEFAULT_RUNS);
+  // Absolute step index across all passes: pass = floor(n / STEPS.length), step = n % STEPS.length.
+  const [n, setN] = useState(0);
   const [results, setResults] = useState<BenchResult[]>([]);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const startedAt = useRef(0);
   const stepDone = useRef(false);
+  const total = runs * STEPS.length;
 
   const start = useCallback(() => {
     setError(null);
     setResults([]);
     startedAt.current = Date.now();
-    setStepIndex(0);
+    setN(0);
     setStatus('settling');
   }, []);
 
@@ -56,7 +60,7 @@ export default function RunAll() {
     (metrics: BenchMetric[] | null) => {
       if (stepDone.current) return;
       stepDone.current = true;
-      const step = STEPS[stepIndex];
+      const step = STEPS[n % STEPS.length];
       setResults((r) => [
         ...r,
         {
@@ -65,35 +69,36 @@ export default function RunAll() {
           backend: step.backend,
           params: step.params,
           metrics: metrics ?? [],
+          run: Math.floor(n / STEPS.length),
           ts: Date.now(),
         },
       ]);
-      setStepIndex((i) => i + 1);
+      setN((i) => i + 1);
       setStatus('settling');
     },
-    [stepIndex]
+    [n]
   );
 
   useEffect(() => {
     if (status !== 'settling') return;
     const id = setTimeout(() => {
-      setStatus(stepIndex < STEPS.length ? 'measuring' : 'done');
+      setStatus(n < total ? 'measuring' : 'done');
     }, SETTLE_MS);
     return () => clearTimeout(id);
-  }, [status, stepIndex]);
+  }, [status, n, total]);
 
   useEffect(() => {
     if (status !== 'measuring') return;
     stepDone.current = false;
     const id = setTimeout(() => complete(null), STEP_TIMEOUT_MS);
     return () => clearTimeout(id);
-  }, [status, stepIndex, complete]);
+  }, [status, n, complete]);
 
   const onExport = useCallback(async () => {
     setExporting(true);
     setError(null);
     try {
-      await exportSession(buildSession(results, startedAt.current));
+      await exportSession(buildSession(results, startedAt.current, runs));
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       console.warn('[run-all] export failed:', msg);
@@ -101,24 +106,32 @@ export default function RunAll() {
     } finally {
       setExporting(false);
     }
-  }, [results]);
+  }, [results, runs]);
 
   const running = status === 'settling' || status === 'measuring';
-  const current = STEPS[stepIndex];
+  const current = STEPS[n % STEPS.length];
+  const passNo = Math.min(Math.floor(n / STEPS.length) + 1, runs);
+  const stepNo = (n % STEPS.length) + 1;
+  const summary = summarizeResults(results);
 
   return (
     <SafeAreaView style={styles.screen} edges={['bottom']}>
       <ScrollView contentContainerStyle={styles.content}>
         <Card>
           <Caption>
-            Runs the standard suite — 5 scenarios × Nitro/Legacy — back to back, then exports a
-            Markdown + JSON file you can AirDrop to your Mac. Run a Release build for citable numbers;
-            memory figures are JS-side heap/footprint deltas.
+            Runs the standard suite — {STEPS.length / 2} scenarios × Nitro/Legacy — {runs}× back to
+            back, then exports a Markdown + JSON file (mean ± sd) you can AirDrop to your Mac. Run a
+            Release build for citable numbers; memory figures are JS-side heap/footprint deltas.
           </Caption>
-          {status === 'idle' && <Button title="Run standard suite" tone="primary" onPress={start} />}
+          {status === 'idle' && (
+            <>
+              <Stepper label="Runs" value={runs} min={1} max={20} onChange={setRuns} />
+              <Button title="Run standard suite" tone="primary" onPress={start} />
+            </>
+          )}
           {running && (
             <Text style={styles.progress}>
-              Step {Math.min(stepIndex + 1, STEPS.length)} / {STEPS.length}
+              Run {passNo} / {runs} · Step {stepNo} / {STEPS.length}
               {status === 'settling' ? ' · settling…' : current ? ` · ${current.title} · ${current.backend}` : ''}
             </Text>
           )}
@@ -135,21 +148,23 @@ export default function RunAll() {
           {error && <Text style={styles.error}>Export failed: {error}</Text>}
         </Card>
 
-        {results.length > 0 && (
+        {summary.length > 0 && (
           <Card>
-            {results.map((r, i) => (
-              <View key={i} style={styles.resultRow}>
-                <View style={styles.resultHead}>
-                  <Text style={styles.resultTitle}>{r.title}</Text>
-                  <Text style={[styles.backend, { color: BACKEND_META[r.backend].color }]}>
-                    {BACKEND_META[r.backend].label}
-                  </Text>
-                </View>
-                <Text style={styles.metrics}>
-                  {r.metrics.length
-                    ? r.metrics.map((m) => `${m.label} ${fmt(m.value)} ${m.unit}`).join(' · ')
-                    : 'no result (timed out)'}
-                </Text>
+            {summary.map((s) => (
+              <View key={s.scenario} style={styles.resultRow}>
+                <Text style={styles.resultTitle}>{s.title}</Text>
+                {(['nitro', 'legacy'] as Backend[]).map((b) =>
+                  s[b].length ? (
+                    <View key={b} style={styles.backendLine}>
+                      <Text style={[styles.backend, { color: BACKEND_META[b].color }]}>
+                        {BACKEND_META[b].label}
+                      </Text>
+                      <Text style={styles.metrics}>
+                        {s[b].map((m) => `${m.label} ${formatAgg(m)}`).join(' · ')}
+                      </Text>
+                    </View>
+                  ) : null
+                )}
               </View>
             ))}
           </Card>
@@ -159,16 +174,11 @@ export default function RunAll() {
       {/* Live measurement stage — views must be laid out & visible to render frames. */}
       <View style={styles.stage}>
         {status === 'measuring' && current && (
-          <current.Component key={stepIndex} backend={current.backend} onDone={complete} />
+          <current.Component key={n} backend={current.backend} onDone={complete} />
         )}
       </View>
     </SafeAreaView>
   );
-}
-
-function fmt(v: number): string {
-  const abs = Math.abs(v);
-  return v.toFixed(abs >= 100 ? 0 : abs >= 10 ? 1 : 2);
 }
 
 const styles = StyleSheet.create({
@@ -177,10 +187,10 @@ const styles = StyleSheet.create({
   progress: { color: colors.accent, fontSize: 14, fontWeight: '600', marginTop: spacing.sm },
   doneRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
   error: { color: colors.danger, fontSize: 12, marginTop: spacing.sm },
-  resultRow: { paddingVertical: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
-  resultHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  resultTitle: { color: colors.text, fontSize: 13, fontWeight: '700', flexShrink: 1 },
-  backend: { fontSize: 12, fontWeight: '700' },
-  metrics: { color: colors.textDim, fontSize: 12, marginTop: 2, fontVariant: ['tabular-nums'] },
+  resultRow: { paddingVertical: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.border, gap: 4 },
+  resultTitle: { color: colors.text, fontSize: 13, fontWeight: '700' },
+  backendLine: { flexDirection: 'row', gap: spacing.sm, alignItems: 'baseline' },
+  backend: { fontSize: 12, fontWeight: '700', minWidth: 48 },
+  metrics: { color: colors.textDim, fontSize: 12, flexShrink: 1, fontVariant: ['tabular-nums'] },
   stage: { height: 320, paddingHorizontal: spacing.md, paddingBottom: spacing.md },
 });
